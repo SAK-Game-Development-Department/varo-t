@@ -1,6 +1,8 @@
 /**
  * Browser side of the relay connection: lobby state, pings, and routing of
- * in-match traffic to the Lockstep.
+ * in-match traffic to the Lockstep. The connection to the room is a
+ * Transport: a WebSocket to the Cloudflare relay, or SkyWay (src/net/skyway.ts)
+ * where one browser runs the room itself.
  */
 import { NET } from '../config/net';
 import {
@@ -21,6 +23,43 @@ export interface LobbyState {
   players: LobbyPlayer[];
   config: RoomConfig;
   state: 'lobby' | 'game';
+}
+
+/** A message pipe to the room (RoomCore), whatever carries it. */
+export interface Transport {
+  readonly kind: 'cloudflare' | 'skyway';
+  send(data: string | ArrayBuffer): void;
+  close(): void;
+  onOpen: () => void;
+  onMessage: (data: string | ArrayBuffer) => void;
+  onClose: () => void;
+}
+
+/** WebSocket to the Cloudflare relay. `create` asks it to open a new room (it may refuse when near its free-plan limit). */
+export function wsTransport(base: string, code: string, create: boolean): Transport {
+  const ws = new WebSocket(`${base}/room/${code}${create ? '?create=1' : ''}`);
+  ws.binaryType = 'arraybuffer';
+  const t: Transport = {
+    kind: 'cloudflare',
+    send: (d) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(d);
+    },
+    close: () => {
+      try {
+        ws.close(1000);
+      } catch {
+        /* ignore */
+      }
+    },
+    onOpen: () => {},
+    onMessage: () => {},
+    onClose: () => {},
+  };
+  ws.addEventListener('open', () => t.onOpen());
+  ws.addEventListener('message', (ev) => t.onMessage(ev.data as string | ArrayBuffer));
+  ws.addEventListener('close', () => t.onClose());
+  ws.addEventListener('error', () => t.onClose());
+  return t;
 }
 
 export function relayUrl(params: URLSearchParams, loc: Location = location): string {
@@ -50,7 +89,8 @@ export class RelayClient {
   /** direct channels to the other players (created once the room admits us) */
   mesh: PeerMesh | null = null;
   onHash: (slot: number, tick: number, h: number) => void = () => {};
-  private readonly ws: WebSocket;
+  /** the connection to the room opened at some point (a refusal before that means "try elsewhere") */
+  opened = false;
   private ping = 0;
   private pings = 0;
   private inMatch = false;
@@ -58,24 +98,22 @@ export class RelayClient {
   private error: ErrorCode | null = null;
 
   constructor(
-    base: string,
+    readonly transport: Transport,
     readonly code: string,
     name: string,
     build: string,
   ) {
-    this.ws = new WebSocket(`${base}/room/${code}`);
-    this.ws.binaryType = 'arraybuffer';
-    this.ws.addEventListener('open', () => {
+    transport.onOpen = () => {
+      this.opened = true;
       this.send({ t: 'hello', name, build });
       this.sendPing();
       this.ping = window.setInterval(() => {
         // fewer relay messages during a match (they count against the free plan)
         if (!this.inMatch || ++this.pings % Math.round(NET.matchPingIntervalMs / NET.pingIntervalMs) === 0) this.sendPing();
       }, NET.pingIntervalMs);
-    });
-    this.ws.addEventListener('message', (ev) => this.receive(ev.data as string | ArrayBuffer));
-    this.ws.addEventListener('close', () => this.shutdown());
-    this.ws.addEventListener('error', () => this.shutdown());
+    };
+    transport.onMessage = (d) => this.receive(d);
+    transport.onClose = () => this.shutdown();
   }
 
   /** Resolves once the room accepted us; rejects with the refusal code (or null for network errors). */
@@ -138,18 +176,14 @@ export class RelayClient {
   }
 
   raw(data: string | ArrayBuffer): void {
-    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(data);
+    this.transport.send(data);
   }
 
   close(): void {
     this.closed = true;
     window.clearInterval(this.ping);
     this.mesh?.close();
-    try {
-      this.ws.close(1000);
-    } catch {
-      /* ignore */
-    }
+    this.transport.close();
   }
 
   /** Report the slowest input path: direct channel where open, else the relay. */

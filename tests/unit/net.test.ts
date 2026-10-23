@@ -15,6 +15,7 @@ import {
   computeDelay,
   decodeInputs,
   encodeInputs,
+  isSkyWayCode,
   randomRoomCode,
   ROOM_CODE_RE,
   sanitizeConfig,
@@ -69,7 +70,13 @@ describe('protocol', () => {
 
   it('validates room codes and configs', () => {
     const r = new Rng(9);
-    for (let i = 0; i < 50; i++) expect(ROOM_CODE_RE.test(randomRoomCode(() => r.float()))).toBe(true);
+    for (let i = 0; i < 50; i++) {
+      const cf = randomRoomCode(() => r.float());
+      const sky = randomRoomCode(() => r.float(), true);
+      expect(ROOM_CODE_RE.test(cf) && ROOM_CODE_RE.test(sky)).toBe(true);
+      // the code alone tells where the room lives
+      expect([isSkyWayCode(cf), isSkyWayCode(sky)]).toEqual([false, true]);
+    }
     expect(ROOM_CODE_RE.test('AB0O')).toBe(false);
     expect(sanitizeConfig({ mode: 'versus', stage: 99, teamSize: 2 } as never)).toEqual({ mode: 'versus', stage: 0, enemies: 0, teamSize: 2 });
   });

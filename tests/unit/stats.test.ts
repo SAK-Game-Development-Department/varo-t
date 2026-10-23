@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { type KvStore, StatsCore, estimate } from '../../server/stats-core';
+import { FREE_LIMITS, type KvStore, StatsCore, estimate } from '../../server/stats-core';
+import { NET } from '../../src/config/net';
 import type { RoomSnapshot } from '../../src/net/room';
 
 function memStore(): KvStore & { data: Map<string, unknown> } {
@@ -46,9 +47,27 @@ describe('admin stats', () => {
   });
 
   it('estimates billable requests like the free plan counts them', () => {
-    expect(estimate({ connects: 4, msgsIn: 2000, bytesIn: 0, msgsOut: 0, bytesOut: 0, matches: 0, reports: 10, adminCalls: 5, peakPlayers: 0 })).toEqual({
-      doRequests: 4 + 100 + 10 + 5,
-      workerRequests: 4 + 10,
+    expect(estimate({ connects: 4, msgsIn: 2000, bytesIn: 0, msgsOut: 0, bytesOut: 0, matches: 0, reports: 10, adminCalls: 5, checks: 3, diverted: 1, peakPlayers: 0 })).toEqual({
+      doRequests: 4 + 100 + 10 + 5 + 3,
+      workerRequests: 4 + 1 + 10,
     });
+  });
+
+  it('sends new rooms to SkyWay once the budget is used up', async () => {
+    const store = memStore();
+    const core = new StatsCore(store);
+    const t0 = Date.UTC(2026, 9, 23, 3, 0, 0);
+    expect((await core.admit(t0)).ok).toBe(true);
+    // a busy day: relayed inputs push the DO estimate past the switch line
+    const msgs = Math.ceil(NET.cloudflareBudget * FREE_LIMITS.doRequests) * FREE_LIMITS.wsMessagesPerRequest;
+    await core.report({ code: 'ABCD', delta: { ...delta(msgs), connects: 0 }, snapshot: snap('ABCD', 2), closed: false }, t0);
+    const r = await core.admit(t0 + 1000);
+    expect(r.ok).toBe(false);
+    expect(r.share).toBeGreaterThanOrEqual(NET.cloudflareBudget);
+    const s = await core.stats(t0 + 2000);
+    expect(s.today.checks).toBe(2);
+    expect(s.today.diverted).toBe(1);
+    // a new UTC day starts fresh
+    expect((await core.admit(t0 + 86_400_000)).ok).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ CC0 アセットを追加した場合は、ここに「名前 / 作者 / 出典U
 |---|---|---|
 | [Babylon.js](https://github.com/BabylonJS/Babylon.js) (`@babylonjs/core`) | Apache-2.0 | 3D レンダリング |
 | [Havok for Babylon.js](https://www.npmjs.com/package/@babylonjs/havok) (`@babylonjs/havok`) | MIT | 破壊された遮蔽物の破片（見た目のみ） |
+| [SkyWay JavaScript SDK](https://github.com/skyway/js-sdk) (`@skyway-sdk/room`) | MIT | マルチプレイの予備経路（Cloudflare の無料枠を使い切ったとき）。使うときだけ読み込む |
 | [Vite](https://github.com/vitejs/vite) | MIT | ビルド |
 | [Vitest](https://github.com/vitest-dev/vitest) | MIT | ユニットテスト |
 | [Playwright](https://github.com/microsoft/playwright) | Apache-2.0 | E2E / 描画確認 |

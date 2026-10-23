@@ -136,7 +136,24 @@ Cloudflare Pages の制限（1ファイル 25 MiB、無料プランは 20,000 �
 - 接続に使う STUN は Cloudflare と Google の無料公開サーバ。有料になりうる TURN は使いません
 - 入力の反映には少し遅れがあります（視点はその場で動きます）。ロビーに「入力遅延（目安）」が出ます。同じ Wi-Fi なら 50 ms 程度、中継のときは 100〜200 ms
 - 中継サーバは Cloudflare Workers + Durable Objects の **Free プラン**（`server/relay.ts`）。Free プランは上限を超えても「その日は接続できなくなる」だけで、**課金されることはありません**
-- 通信まわりの数値（最大人数、入力遅延の範囲、送信間隔、STUN サーバ）は `src/config/net.ts`
+- 通信まわりの数値（最大人数、入力遅延の範囲、送信間隔、STUN サーバ、SkyWay への切り替えライン）は `src/config/net.ts`
+
+### SkyWay への自動切り替え（Cloudflare の無料枠を使い切りそうなとき）
+「ルームを作る」を押すと、まず Cloudflare の中継サーバに作ろうとします。次のときは自動で **SkyWay（NTT の WebRTC サービス、Free プラン）** にルームを作ります。
+- 今日の Cloudflare 無料枠の使用率（推定）が **80%**（`NET.cloudflareBudget`）を超えている。残りは、すでに開いているルームのために取っておきます
+- 中継サーバにつながらない（無料枠切れ・障害・回線）
+
+SkyWay のルームはコードが**数字で始まります**（例 `3KQZ`）。参加する側は普通にコードを入れるだけで、自動で SkyWay に接続します。ロビーには「SkyWay 経由」と表示されます。
+- SkyWay にはこちらのサーバがないので、**ルームを作った人のブラウザがルームの管理役**になります。作った人が抜けるとルームは閉じます
+- SkyWay Free プランの上限は月 50 万接続・TURN 500 GB など（[料金](https://skyway.ntt.com/ja/pricing)）。こちらも超えても課金はされません。直接つながらない組み合わせは SkyWay の TURN を通るので、「中継」でも遊べます
+- 商用利用は不可（学園祭の展示は対象外）
+
+**設定方法**（未設定なら SkyWay は使わず、従来どおり Cloudflare だけで動きます）
+1. https://skyway.ntt.com で無料アカウントを作り、コンソールでアプリケーションを作成
+2. `.env.example` を `.env.local` にコピーし、App ID とシークレットキーを書く
+3. `npm run build` → `npm run deploy`（キーはビルド時に埋め込まれます）
+
+注意: いちばん簡単な方法として、接続用のトークンをブラウザ内で作っています。そのためシークレットキーは配信される JS から読み取れます。悪用されても Free プランなので課金はされませんが、無料枠を使われる可能性はあります。気になる場合は展示後に SkyWay コンソールでキーを再発行してください。
 
 ### 無料枠の目安
 Free プランは 1日 100,000 リクエスト（日本時間 9:00 にリセット）。WebSocket の受信メッセージは 20 件で 1 リクエストです。
@@ -149,6 +166,7 @@ Free プランは 1日 100,000 リクエスト（日本時間 9:00 にリセッ�
 - 接続数・メッセージ数・通信量・試合数・同時接続の最大
 - 過去24時間のグラフ、過去7日間の表
 - 稼働中のルーム（モード・ステージ・プレイヤー・各プレイヤーが直接通信か中継か・遅延）
+- 新しいルームの行き先（Cloudflare / SkyWay）と、今日 SkyWay に回したルームの数（SkyWay 上のルーム自体はここに出ません。SkyWay コンソールで確認）
 
 パスワードの設定・変更:
 ```bash
@@ -250,6 +268,6 @@ docs/       設計・バランス・性能・確認項目のレポート
 - しゃがみの Ctrl キーは、全画面でキーボードロックが有効なときだけ使えます（Ctrl+W でタブが閉じるのを防ぐため）。
 
 ## 技術スタック
-TypeScript / Vite / Babylon.js（WebGPU・WebGL2） / Havok（破片の見た目の物理のみ） / Vitest / Playwright / Cloudflare Pages / WebRTC（マルチプレイの直接通信） / Cloudflare Workers + Durable Objects（ルーム・接続の仲介・管理ページ）
+TypeScript / Vite / Babylon.js（WebGPU・WebGL2） / Havok（破片の見た目の物理のみ） / Vitest / Playwright / Cloudflare Pages / WebRTC（マルチプレイの直接通信） / Cloudflare Workers + Durable Objects（ルーム・接続の仲介・管理ページ） / SkyWay（無料枠を使い切ったときの予備）
 
 ゲーム名、世界観、キャラクター、武器、アビリティはすべてオリジナルです。

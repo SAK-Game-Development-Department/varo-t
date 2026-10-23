@@ -22,9 +22,11 @@ import {
   type MatchSetup,
   ROOM_CODE_RE,
   buildMatch,
+  isSkyWayCode,
   randomRoomCode,
 } from "../net/protocol";
-import { RelayClient, relayUrl } from "../net/relay-client";
+import { RelayClient, relayUrl, wsTransport } from "../net/relay-client";
+import { skywayAvailable, skywayTransport } from "../net/skyway";
 import { STAGES } from "../sim/map/registry";
 import { AttractMode } from "./attract";
 import {
@@ -432,13 +434,13 @@ export class App {
         busy,
         {
           create: (name) => {
-            const rand = () =>
-              crypto.getRandomValues(new Uint32Array(1))[0] / 0x100000000;
-            this.joinRoom(name, randomRoomCode(rand));
+            // ?net=skyway forces SkyWay (testing); otherwise Cloudflare first
+            const sky = this.params.get("net") === "skyway" && skywayAvailable();
+            this.joinRoom(name, newRoomCode(sky), true, !sky);
           },
           join: (name, code) =>
             ROOM_CODE_RE.test(code)
-              ? this.joinRoom(name, code)
+              ? this.joinRoom(name, code, false, false)
               : this.goMultiplayer(t("errCode"), true),
           back: () => this.goTitle(),
         },
@@ -447,13 +449,29 @@ export class App {
     );
   }
 
-  private joinRoom(name: string, code: string): void {
+  /**
+   * Connect to a room: codes starting with a digit live on SkyWay, the rest
+   * on the Cloudflare relay. `fallback`: when the relay refuses or cannot be
+   * reached before the room opens (out of free quota, busy, offline), open a
+   * new room on SkyWay instead.
+   */
+  private joinRoom(
+    name: string,
+    code: string,
+    create: boolean,
+    fallback: boolean,
+  ): void {
     this.settings.name = name.slice(0, 12);
     saveSettings(this.kv, this.settings);
     this.leaveRoom();
-    this.goMultiplayer(t("connecting"), false, true);
+    const sky = isSkyWayCode(code);
+    if (sky && !skywayAvailable())
+      return this.goMultiplayer(t("errNoSkyway"), true);
+    this.goMultiplayer(t(sky ? "connectingSkyway" : "connecting"), false, true);
     const c = new RelayClient(
-      relayUrl(this.params),
+      sky
+        ? skywayTransport(code, create)
+        : wsTransport(relayUrl(this.params), code, create),
       code,
       name || "PLAYER",
       __BUILD_ID__,
@@ -477,7 +495,13 @@ export class App {
       (err: ErrorCode | null) => {
         if (this.net !== c) return;
         this.net = null;
-        this.goMultiplayer(netError(err), true);
+        if (fallback && !c.opened && skywayAvailable())
+          this.joinRoom(name, newRoomCode(true), true, false);
+        else
+          this.goMultiplayer(
+            sky && !err ? t("errSkyway") : netError(err),
+            true,
+          );
       },
     );
   }
@@ -725,10 +749,16 @@ export class App {
   }
 }
 
+function newRoomCode(skyway: boolean): string {
+  const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 0x100000000;
+  return randomRoomCode(rand, skyway);
+}
+
 function netError(code: ErrorCode | null): string {
   if (code === "full") return t("errFull");
   if (code === "inGame") return t("errInGame");
   if (code === "version") return t("errVersion");
+  if (code === "badRoom") return t("errBadRoom");
   return t("errNetwork");
 }
 

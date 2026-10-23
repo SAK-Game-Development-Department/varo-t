@@ -78,7 +78,8 @@ export const ADMIN_HTML = /* html */ `<!doctype html>
       <div class="gauge"><div class="row"><span>Durable Objects リクエスト</span><b id="doReq">—</b></div><div class="bar"><i id="doBar"></i></div></div>
       <div class="gauge"><div class="row"><span>Worker リクエスト</span><b id="wReq">—</b></div><div class="bar"><i id="wBar"></i></div></div>
       <div class="meta" id="reset"></div>
-      <div class="note">上限を超えると、その日は接続できなくなるだけで課金はされません（Free プラン）。WebSocket の受信メッセージは 20 通で 1 リクエスト。直接通信（P2P）のプレイヤー間の入力は数えられません。</div>
+      <div class="meta" id="route"></div>
+      <div class="note">上限を超えると、その日は接続できなくなるだけで課金はされません（Free プラン）。WebSocket の受信メッセージは 20 通で 1 リクエスト。直接通信（P2P）のプレイヤー間の入力は数えられません。使用率が切り替えラインを超えると、新しいルームは SkyWay（別の無料枠）で作られます（SkyWay 側のルームはここには出ません）。</div>
     </section>
     <section class="half">
       <h2>今日の通信</h2>
@@ -143,6 +144,8 @@ function render(s) {
   const left = s.nextReset - s.now;
   $('reset').textContent = 'リセットまで ' + Math.floor(left / 3600000) + ' 時間 ' + Math.floor(left / 60000) % 60 + ' 分（' + new Date(s.nextReset).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit' }) + '）';
   const u = s.today;
+  const sky = s.share >= s.budget;
+  $('route').innerHTML = '新しいルームの行き先: <b>' + (sky ? 'SkyWay' : 'Cloudflare') + '</b>（使用率 ' + (s.share * 100).toFixed(1) + '% / 切り替え ' + Math.round(s.budget * 100) + '%）' + (u.diverted ? ' · 今日 SkyWay に回したルーム ' + fmt(u.diverted) : '');
   const players = s.live.reduce((n, r) => n + r.players.length, 0);
   const tiles = [
     [fmt(s.live.length), '稼働中のルーム'], [fmt(players), '接続中のプレイヤー'], [fmt(u.peakPlayers), '同時接続の最大'],

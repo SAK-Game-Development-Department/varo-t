@@ -15,6 +15,15 @@ export const NET = {
   devRelayUrl: 'ws://localhost:8787',
   maxPlayers: 4,
   /**
+   * New rooms go to SkyWay (free plan, see src/net/skyway.ts) once today's
+   * estimated Cloudflare usage passes this share of the free plan, or when the
+   * relay cannot be reached. The rest stays for rooms already open.
+   * SkyWay is used only when VITE_SKYWAY_APP_ID / VITE_SKYWAY_SECRET are set (.env.local).
+   */
+  cloudflareBudget: 0.8,
+  /** SkyWay rooms: the host drops a player it has not heard from for this long */
+  skywaySilenceMs: 10_000,
+  /**
    * Public STUN servers (free) used to open direct browser-to-browser channels.
    * No TURN: pairs that cannot connect directly fall back to the relay.
    */

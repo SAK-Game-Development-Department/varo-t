@@ -20,7 +20,7 @@ import {
 } from "../input/bindings";
 import { t } from "./i18n";
 import { NET } from "../config/net";
-import { type RoomConfig, computeDelay } from "../net/protocol";
+import { type RoomConfig, computeDelay, isSkyWayCode } from "../net/protocol";
 import { MOVEMENT } from "../config/movement";
 import type { LobbyState } from "../net/relay-client";
 
@@ -461,7 +461,7 @@ export function lobbyScreen(
   };
   s.innerHTML = `<div class="card mp-card lobby">
     <h2>${t("lobby")}</h2>
-    <div class="mp-room"><span>${t("roomCode")}</span><b>${esc(lobby.code)}</b><small>${t("lobbyShare")}</small></div>
+    <div class="mp-room"><span>${t("roomCode")}</span><b>${esc(lobby.code)}</b>${isSkyWayCode(lobby.code) ? `<em class="mp-via">${t("viaSkyway")}</em>` : ""}<small>${t("lobbyShare")}</small></div>
     <div class="mp-teams">${column(0)}${column(1)}</div>
     ${versus && me ? `<div class="mp-switch"><button data-a="switch">${t("switchTeam")}</button></div>` : ""}
     <div class="settings-row"><span>${t("mode")}</span>${seg("mode", [

@@ -5,6 +5,7 @@
  * remembers which rooms are live. Pure logic over a tiny storage interface
  * (unit-testable without the Workers runtime).
  */
+import { NET } from '../src/config/net';
 import type { RoomSnapshot, RoomTraffic } from '../src/net/room';
 
 /** Cloudflare Workers Free plan, per day (https://developers.cloudflare.com/durable-objects/platform/pricing/). */
@@ -28,6 +29,10 @@ export interface Usage extends RoomTraffic {
   reports: number;
   /** admin API calls */
   adminCalls: number;
+  /** budget checks before opening a room (one Durable Object request each) */
+  checks: number;
+  /** room creations sent to SkyWay because the budget was used up */
+  diverted: number;
   peakPlayers: number;
 }
 
@@ -44,18 +49,25 @@ export interface LiveRoom extends RoomSnapshot {
   traffic: RoomTraffic;
 }
 
-const empty = (): Usage => ({ connects: 0, msgsIn: 0, bytesIn: 0, msgsOut: 0, bytesOut: 0, matches: 0, reports: 0, adminCalls: 0, peakPlayers: 0 });
+const empty = (): Usage => ({ connects: 0, msgsIn: 0, bytesIn: 0, msgsOut: 0, bytesOut: 0, matches: 0, reports: 0, adminCalls: 0, checks: 0, diverted: 0, peakPlayers: 0 });
 const dayKey = (t: number) => `d:${new Date(t).toISOString().slice(0, 10)}`;
 const hourKey = (t: number) => `h:${new Date(t).toISOString().slice(0, 13)}`;
 /** rooms that stopped reporting for this long are considered gone */
 const STALE_MS = 3 * 60_000;
 
+/** Share of today's free plan used (the larger of the two limits). */
+export function usedShare(u: Usage): number {
+  const e = estimate(u);
+  return Math.max(e.doRequests / FREE_LIMITS.doRequests, e.workerRequests / FREE_LIMITS.workerRequests);
+}
+
 /** Estimated billable requests for a usage record. */
 export function estimate(u: Usage): { doRequests: number; workerRequests: number } {
   return {
     // each WebSocket connection: one Worker request routed to one Durable Object request
-    doRequests: u.connects + Math.ceil(u.msgsIn / FREE_LIMITS.wsMessagesPerRequest) + u.reports + u.adminCalls,
-    workerRequests: u.connects + u.adminCalls * 2,
+    // a diverted creation was a Worker request that never connected
+    doRequests: u.connects + Math.ceil(u.msgsIn / FREE_LIMITS.wsMessagesPerRequest) + u.reports + u.adminCalls + u.checks,
+    workerRequests: u.connects + u.diverted + u.adminCalls * 2,
   };
 }
 
@@ -112,6 +124,21 @@ export class StatsCore {
     }
   }
 
+  /**
+   * Someone wants to open a room: may it go on Cloudflare? Past
+   * NET.cloudflareBudget of today's free plan the answer is no and the client
+   * opens it on SkyWay, so the rest stays for rooms already open.
+   */
+  async admit(now: number): Promise<{ ok: boolean; share: number }> {
+    const u = await this.usage(dayKey(now));
+    u.checks++;
+    const share = usedShare(u);
+    const ok = share < NET.cloudflareBudget;
+    if (!ok) u.diverted++;
+    await this.store.put(dayKey(now), u);
+    return { ok, share };
+  }
+
   async liveRooms(now: number): Promise<LiveRoom[]> {
     const live = await this.liveMap();
     const stale = [...live].filter(([, room]) => now - room.updatedAt > STALE_MS).map(([code]) => code);
@@ -137,7 +164,7 @@ export class StatsCore {
       days.push({ day: k.slice(2), usage: this.cache.get(k) ?? { ...empty(), ...((await this.store.get<Usage>(k)) ?? {}) } });
     }
     const nextReset = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1);
-    return { now, today, estimate: estimate(today), limits: FREE_LIMITS, nextReset, hours, days, live: await this.liveRooms(now) };
+    return { now, today, estimate: estimate(today), limits: FREE_LIMITS, budget: NET.cloudflareBudget, share: usedShare(today), nextReset, hours, days, live: await this.liveRooms(now) };
   }
 
   /** Drop hourly records older than two days and daily ones older than 60 days. */

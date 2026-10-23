@@ -40,6 +40,16 @@ export default {
     const room = env.ROOMS.get(env.ROOMS.idFromName(code), { locationHint: LOCATION_HINT });
     if (m[1] === 'where') return room.fetch(req);
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected websocket', { status: 426 });
+    // a new room: only while today's free plan has room to spare (else the client goes to SkyWay)
+    if (url.searchParams.has('create')) {
+      let ok = false;
+      try {
+        ok = ((await (await statsStub(env).fetch(new Request('https://stats/admit', { method: 'POST' }))).json()) as { ok: boolean }).ok;
+      } catch (e) {
+        console.error('[relay] budget check failed', e);
+      }
+      if (!ok) return new Response('busy: use SkyWay', { status: 503 });
+    }
     return room.fetch(req);
   },
 };
@@ -160,6 +170,7 @@ export class Stats implements DurableObject {
       if (++this.reports % 200 === 0) await this.core.prune(now);
       return new Response('ok');
     }
+    if (path === '/admit' && req.method === 'POST') return Response.json(await this.core.admit(now));
     if (path === '/stats') return Response.json(await this.core.stats(now));
     return new Response('not found', { status: 404 });
   }

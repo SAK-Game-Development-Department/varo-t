@@ -63,7 +63,8 @@
 - マルチプレイ（2026-10-23 追加）: 遅延ロックステップ。入力は WebRTC P2P（`src/net/peers.ts`、公開 STUN のみ・TURN なし）、
   直接つながらない組だけ中継。`src/net/`（protocol / lockstep / room / relay-client / peers）＋ `server/relay.ts`（Worker + Durable Objects、
   Pages とは別に `npm run relay:deploy`）。管理ページ `/admin`（`server/admin-page.ts`, `stats-core.ts`、パスワードは secret `ADMIN_TOKEN`）。
-  **完全無料が絶対条件**: Workers/DO は Free プランのみ、有料サービス（TURN 等）を足さない。中継 URL・遅延・送信間隔は `config/net.ts`。
+  **完全無料が絶対条件**: Workers/DO は Free プランのみ、有料サービス（TURN 等）を足さない。
+  予備: 無料枠の 80% 超え・中継不通のときは新規ルームを SkyWay Free（`src/net/skyway.ts`、作成者のブラウザが RoomCore を持つ、コードが数字始まり）へ。キーは `.env.local` の `VITE_SKYWAY_*`。中継 URL・遅延・送信間隔は `config/net.ts`。
   **sim を変えたら全クライアントが同じビルドである必要がある**（ルームは `__BUILD_ID__` 一致のみ入室可）。
   試合中に時間の進み方を変える処理（スロー・一時停止）はオンラインでは無効にすること。`MatchMode` は `localId`/`team` を使い、agent 0 決め打ち禁止。
 - 自己対戦（`tools/selfplay.ts`）実行中は `src/sim`・`src/config` を編集しない（ワーカーがソースを読み直す）。

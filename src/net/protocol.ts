@@ -92,13 +92,19 @@ export const KIND_INPUTS = 1;
 export const INPUT_HEADER = 9;
 export const INPUT_STRIDE = 8;
 
-/** Room codes: 4 characters without look-alikes (0/O, 1/I/L). */
+/**
+ * Room codes: 4 characters without look-alikes (0/O, 1/I/L). Rooms on the
+ * Cloudflare relay start with a letter, rooms on SkyWay with a digit, so a
+ * joiner knows where to look from the code alone.
+ */
 export const ROOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const ROOM_CODE_RE = /^[A-HJKMNP-Z2-9]{4}$/;
+export const isSkyWayCode = (code: string): boolean => /^[2-9]/.test(code);
 
-export function randomRoomCode(rand: () => number): string {
-  let s = '';
-  for (let i = 0; i < 4; i++) s += ROOM_ALPHABET[Math.floor(rand() * ROOM_ALPHABET.length)];
+export function randomRoomCode(rand: () => number, skyway = false): string {
+  const first = skyway ? '23456789' : ROOM_ALPHABET.slice(0, 23);
+  let s = first[Math.floor(rand() * first.length)];
+  for (let i = 1; i < 4; i++) s += ROOM_ALPHABET[Math.floor(rand() * ROOM_ALPHABET.length)];
   return s;
 }
 

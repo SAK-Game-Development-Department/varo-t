@@ -104,6 +104,11 @@ const DICT = {
     en: "To join a friend, enter their 4-letter code",
   },
   connecting: { ja: "接続中…", en: "Connecting…" },
+  connectingSkyway: { ja: "SkyWay で接続中…", en: "Connecting via SkyWay…" },
+  errNoSkyway: { ja: "数字で始まるコードは SkyWay のルームですが、このビルドでは SkyWay が使えません", en: "Codes starting with a digit are SkyWay rooms, which this build cannot use" },
+  errBadRoom: { ja: "ルームが見つかりません（作った人が抜けると閉じます）", en: "Room not found (it closes when its creator leaves)" },
+  errSkyway: { ja: "SkyWay に接続できませんでした（App ID / シークレットキーを確認）", en: "Could not connect to SkyWay (check the app ID / secret key)" },
+  viaSkyway: { ja: "SkyWay 経由", en: "via SkyWay" },
   lobby: { ja: "ロビー", en: "LOBBY" },
   lobbyShare: {
     ja: "このコードを他のプレイヤーに伝えてください（最大4人）",
